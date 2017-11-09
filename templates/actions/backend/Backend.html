@@ -1,0 +1,184 @@
+<div class="content">
+    <div class="block double-padded">
+        <h1>
+            Продажи товаров с характеристикой «{$feature.name|escape}»
+            <span class="hint" id="period-description">[`Custom range`]</span>
+        </h1>
+
+
+        <div class="clear-both"></div>
+
+        <div class="sidebar right300px">
+
+            {if !empty($pie_data)}
+                <div class="graph-wrapper">
+                    <div class="pie-wrapper"></div>
+                    <div class="hint-wrapper"></div>
+                </div>
+                <script>
+                    var pie_data = {json_encode($pie_data)};
+                    (function () {
+                        var url = "{$wa_url}wa-apps/shop/js/charts/d3chart-pie.js?{$wa->version()}";
+                                if (typeof showPieGraph == 'undefined') {
+                                    return $.ajax({
+                                        dataType: "script",
+                                        url: url,
+                                        cache: true
+                                    });
+                                } else {
+                                    return $.Deferred(function (d) {
+                                        d.resolve();
+                                    });
+                                }
+                            })().done(function () {
+                                showPieGraph(pie_data, {
+                                    color_type: "products"
+                                });
+                            });
+                </script>
+            {/if}
+        </div>
+
+        <div class="content right300px">
+
+            {if $sales}
+
+                <table id="s-report-products-bestsellers-table" class="zebra">
+                    <thead>
+                        <tr class="white s-header-row">
+                            <th></th>
+                            <th class="align-right">
+                                {if $request_options.sort == 'sales'}
+                                    Продажи<i class="icon16 darr"></i>
+                                {else}
+                                    <a href="#/salesfeatures/sort=sales/">Продажи</a>
+                                {/if}
+                            </th>
+                            <th class="s-wider-cell align-right">
+                                {if $request_options.sort == 'profit'}
+                                    Прибыль<i class="icon16 darr"></i>
+                                {else}
+                                    <a href="#/salesfeatures/sort=profit/">Прибыль</a>
+                                {/if}
+                            </th>
+                            <th style="width:100px;"></th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        {foreach $sales as $sale}
+                            <tr>
+                                <td>{$feature_values[$sale.feature_value_id]}</td>
+                                <td class="s-wider-cell align-right">
+                                    <span title="{sprintf_wp('[`Общая стоимость %1$s &minus; Скидка %2$s`]', wa_currency($sale.sales_subtotal, $def_cur), wa_currency($sale.discount, $def_cur))}">
+                                        {wa_currency_html($sale.sales, $def_cur)}
+                                    </span>
+                                </td>
+                                <td class="s-wider-cell align-right">
+                                    <span title="{sprintf_wp('[`Общие продажи %1$s &minus; Закупочная стоимость %2$s`]', wa_currency($sale.sales, $def_cur), wa_currency($sale.purchase, $def_cur))}">
+                                        {wa_currency_html($sale.profit, $def_cur)}
+                                    </span>
+                                </td>
+                                <td class="s-wider-cell" style="background: #fff;"{if $sale.sales - $sale.profit > 0} title="{sprintf('[`Рентабельность реализованной продукции = Прибыль (%s) / Закупочная стоимость (%s) = %s%%`]', wa_currency($sale.profit, $def_cur), wa_currency($sale.sales - $sale.profit, $def_cur), round( 100 * $sale.profit / ($sale.sales - $sale.profit)) )}"{/if}>
+                                    {strip}
+                                        <div class="s-bar" style="width:{$sale.sales_percent}px;">
+                                            <div class="s-bar2" style="width:{$sale.profit_percent}px;"></div>
+                                        </div>
+                                    {/strip}
+                                </td>
+                            </tr>
+                        {/foreach}
+                    </tbody>
+                    <tfoot>
+                        
+                        <tr>
+                            <td></td>
+                            <td class="bold s-wider-cell align-right">{wa_currency_html($total_sales, $def_cur)}</td>
+                            <td class="bold s-wider-cell align-right">{wa_currency_html($total_profit, $def_cur)}</td>
+                            <td class="s-wider-cell" style="background: #fff;"></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            {else}
+                <p style="margin-top:10px;">Не было продаж товаров выбранной характеристикой за данный период</p>
+            {/if}
+
+        </div>
+
+        <div class="clear-both"></div>
+    </div>
+</div>
+
+<div class="hidden">
+    <ul class="menu-h">
+        <li>
+            <select id="s-products-report-features-selector" class="features-selector">
+                {foreach $features as $_feature}
+                    <option value="{$_feature.id}"{if ifset($request_options.feature_id) == $_feature.id} selected{/if}>{$_feature.name|escape}</option>
+                {/foreach}
+            </select>
+        </li>
+        <li>
+            <select id="s-products-report-storefront-selector" class="storefront-selector">
+                <option value="">Все каналы</option>
+                {foreach $sales_channels as $id => $name}
+                    <option value="{$id|escape}"{if ifset($request_options.sales_channel) == $id} selected{/if}>{$name|escape}</option>
+                {/foreach}
+            </select>
+        </li>
+    </ul>
+</div>
+
+<script>(function () {
+        "use strict";
+
+        document.title = "Продажи товаров с характеристикой «{$feature.name|escape}» — {$wa->accountName(false)|escape:javascript}";
+
+
+        var request_params = {json_encode($request_options)};
+        var action_url = '?plugin=salesfeatures';
+
+        // Storefront selector logic
+        (function () {
+            "use strict";
+
+            var $storefront_selector = $('#s-products-report-storefront-selector').removeAttr('id');
+
+            // Move selector into the top menu wrapper
+            $('#s-reports-custom-controls').empty().append($storefront_selector.closest('ul'));
+
+            // Reload page when user changes something in the selector
+            $storefront_selector.change(function () {
+                $storefront_selector.after('<i class="icon16 loading"></i>');
+                $.post(action_url, $.extend({}, request_params, {
+                    sales_channel: $storefront_selector.val()
+                }), function (r) {
+                    $('#reportscontent').html(r);
+                });
+            });
+
+            var $features_selector = $('#s-products-report-features-selector').removeAttr('id');
+
+            // Reload page when user changes something in the selector
+            $features_selector.change(function () {
+                $features_selector.after('<i class="icon16 loading"></i>');
+                $.post(action_url, $.extend({}, request_params, {
+                    feature_id: $features_selector.val()
+                }), function (r) {
+                    $('#reportscontent').html(r);
+                });
+            });
+
+        })();
+
+        // Human-readable period description in page header
+        (function () {
+            var $timeframe_selected_li = $('#mainmenu .s-reports-timeframe .selected');
+            if ($timeframe_selected_li.length && $timeframe_selected_li.data('timeframe') != 'custom') {
+                $('#period-description').html($timeframe_selected_li.find('a').html());
+            }
+        })();
+
+    })();
+</script>
+
